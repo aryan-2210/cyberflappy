@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberFlappy - Neon Bird Adventure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Press+Start+2P&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Orbitron', sans-serif;
+            background-color: #0f0e17;
+            color: #fffffe;
+        }
+        
+        #gameCanvas {
+            display: block;
+            background-color: #0f0e17;
+        }
+        
+        .cyber-text {
+            text-shadow: 0 0 5px #ff2a6d, 0 0 10px #ff2a6d;
+        }
+        
+        .neon-pink {
+            color: #ff2a6d;
+        }
+        
+        .neon-blue {
+            color: #05d9e8;
+        }
+        
+        .neon-purple {
+            color: #d300c5;
+        }
+        
+        .cyber-button {
+            background: linear-gradient(145deg, #ff2a6d, #d300c5);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px rgba(255, 42, 109, 0.5);
+        }
+        
+        .cyber-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(255, 42, 109, 0.8);
+        }
+        
+        .cyber-button:active {
+            transform: translateY(1px);
+        }
+        
+        .pixel-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+        
+        .grid-pattern {
+            background-image: 
+                linear-gradient(rgba(5, 217, 232, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(5, 217, 232, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .glow {
+            animation: glow 1.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #05d9e8, 0 0 20px #05d9e8;
+            }
+            to {
+                text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #05d9e8, 0 0 40px #05d9e8;
+            }
+        }
+    </style>
+</head>
+<body class="grid-pattern flex items-center justify-center min-h-screen">
+    <div class="relative">
+        <canvas id="gameCanvas" width="400" height="600" class="border-4 border-neon-purple rounded-lg shadow-lg shadow-purple-500/50"></canvas>
+        
+        <div id="startScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-70">
+            <h1 class="text-4xl md:text-5xl font-bold mb-6 cyber-text neon-pink">CYBER<span class="neon-blue">FLAPPY</span></h1>
+            <p class="text-lg neon-blue mb-8">Navigate the neon grid</p>
+            <button id="startButton" class="cyber-button glow">START GAME</button>
+            <div class="mt-8 text-xs neon-blue">
+                <p>Press SPACE or CLICK to flap</p>
+            </div>
+        </div>
+        
+        <div id="gameOverScreen" class="absolute inset-0 flex-col items-center justify-center bg-black bg-opacity-80 hidden">
+            <h2 class="text-3xl font-bold mb-4 cyber-text neon-pink">GAME OVER</h2>
+            <p class="text-xl neon-blue mb-2">Your score: <span id="finalScore" class="neon-pink">0</span></p>
+            <button id="restartButton" class="cyber-button mt-6">TRY AGAIN</button>
+        </div>
+        
+        <div id="scoreDisplay" class="absolute top-4 left-0 right-0 text-center hidden">
+            <p class="text-2xl font-bold cyber-text neon-blue">SCORE: <span id="score" class="neon-pink">0</span></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const startScreen = document.getElementById('startScreen');
+            const gameOverScreen = document.getElementById('gameOverScreen');
+            const startButton = document.getElementById('startButton');
+            const restartButton = document.getElementById('restartButton');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const scoreElement = document.getElementById('score');
+            const finalScoreElement = document.getElementById('finalScore');
+            
+            // Game variables
+            let gameRunning = false;
+            let score = 0;
+            let highScore = 0;
+            let animationId;
+            let basePipeSpeed = 3;
+            let currentPipeSpeed = basePipeSpeed;
+            let lastTime;
+            
+            // Bird properties
+            const bird = {
+                x: 100,
+                y: canvas.height / 2,
+                width: 30,
+                height: 24,
+                velocity: 0,
+                gravity: 0.5,
+                jumpForce: -10,
+                color: '#ff2a6d'
+            };
+            
+            // Pipe properties
+            const pipes = [];
+            const pipeWidth = 60;
+            const pipeGap = 150;
+            let pipeTimer = 0;
+            const pipeInterval = 1500; // milliseconds
+            
+            // Grid pattern for cyberpunk effect
+            const gridSize = 20;
+            const gridColor = 'rgba(5, 217, 232, 0.1)';
+            
+            // Game functions
+            function startGame() {
+                gameRunning = true;
+                score = 0;
+                currentPipeSpeed = basePipeSpeed;
+                bird.y = canvas.height / 2;
+                bird.velocity = 0;
+                pipes.length = 0;
+                pipeTimer = 0;
+                
+                startScreen.classList.add('hidden');
+                gameOverScreen.classList.add('hidden');
+                scoreDisplay.classList.remove('hidden');
+                updateScore();
+                
+                // Start game loop
+                lastTime = Date.now();
+                gameLoop();
+            }
+            
+            function endGame() {
+                gameRunning = false;
+                cancelAnimationFrame(animationId);
+                finalScoreElement.textContent = score;
+                gameOverScreen.classList.remove('hidden');
+                scoreDisplay.classList.add('hidden');
+            }
+            
+            function updateScore() {
+                scoreElement.textContent = score;
+                
+                // Gradually increase speed after score 5
+                if (score >= 5) {
+                    // Increase speed by 0.2 for every point after 5
+                    // Cap the maximum speed at 8
+                    currentPipeSpeed = Math.min(basePipeSpeed + (score - 5) * 0.2, 8);
+                    
+                    // Visual feedback when speed increases
+                    if (Math.floor(currentPipeSpeed * 10) % 10 === 0) {
+                        document.body.style.backgroundColor = '#1a0e24';
+                        setTimeout(() => {
+                            document.body.style.backgroundColor = '#0f0e17';
+                        }, 100);
+                    }
+                }
+            }
+            
+            function drawGrid() {
+                ctx.strokeStyle = gridColor;
+                ctx.lineWidth = 1;
+                
+                // Vertical lines
+                for (let x = 0; x <= canvas.width; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+                
+                // Horizontal lines
+                for (let y = 0; y <= canvas.height; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+            }
+            
+            function drawBird() {
+                // Draw bird body
+                ctx.fillStyle = bird.color;
+                ctx.beginPath();
+                ctx.ellipse( bird.x, bird.y, bird.width / 2, bird.height / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw eye
+                ctx.fillStyle = '#05d9e8';
+                ctx.beginPath();
+                ctx.arc(bird.x + 5, bird.y - 5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw beak
+                ctx.fillStyle = '#ffd803';
+                ctx.beginPath();
+                ctx.moveTo(bird.x + bird.width / 2, bird.y);
+                ctx.lineTo(bird.x + bird.width / 2 + 15, bird.y - 5);
+                ctx.lineTo(bird.x + bird.width / 2 + 15, bird.y + 5);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Neon glow effect
+                ctx.shadowColor = bird.color;
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.ellipse(bird.x, bird.y, bird.width / 2 + 2, bird.height / 2 + 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            
+            function createPipe() {
+                const minHeight = 50;
+                const maxHeight = canvas.height - pipeGap - minHeight;
+                const height = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+                
+                pipes.push({
+                    x: canvas.width,
+                    height: height,
+                    passed: false
+                });
+            }
+            
+            function drawPipes() {
+                ctx.fillStyle = '#d300c5';
+                
+                for (let i = 0; i < pipes.length; i++) {
+                    const pipe = pipes[i];
+                    
+                    // Upper pipe
+                    ctx.fillRect(pipe.x, 0, pipeWidth, pipe.height);
+                    
+                    // Lower pipe
+                    ctx.fillRect(pipe.x, pipe.height + pipeGap, pipeWidth, canvas.height - pipe.height - pipeGap);
+                    
+                    // Neon glow effect
+                    ctx.shadowColor = '#d300c5';
+                    ctx.shadowBlur = 10;
+                    ctx.fillRect(pipe.x - 2, 0, pipeWidth + 4, pipe.height);
+                    ctx.fillRect(pipe.x - 2, pipe.height + pipeGap, pipeWidth + 4, canvas.height - pipe.height - pipeGap);
+                    ctx.shadowBlur = 0;
+                    
+                    // Pipe edges
+                    ctx.fillStyle = '#05d9e8';
+                    ctx.fillRect(pipe.x - 2, pipe.height - 10, pipeWidth + 4, 10);
+                    ctx.fillRect(pipe.x - 2, pipe.height + pipeGap, pipeWidth + 4, 10);
+                    
+                    // Grid pattern on pipes
+                    ctx.strokeStyle = 'rgba(5, 217, 232, 0.3)';
+                    ctx.lineWidth = 1;
+                    
+                    // Upper pipe grid
+                    for (let y = 10; y < pipe.height; y += 15) {
+                        ctx.beginPath();
+                        ctx.moveTo(pipe.x, y);
+                        ctx.lineTo(pipe.x + pipeWidth, y);
+                        ctx.stroke();
+                    }
+                    
+                    // Lower pipe grid
+                    for (let y = pipe.height + pipeGap + 10; y < canvas.height; y += 15) {
+                        ctx.beginPath();
+                        ctx.moveTo(pipe.x, y);
+                        ctx.lineTo(pipe.x + pipeWidth, y);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.fillStyle = '#d300c5';
+                }
+            }
+            
+            function updatePipes(deltaTime) {
+                pipeTimer += deltaTime;
+                
+                if (pipeTimer > pipeInterval) {
+                    createPipe();
+                    pipeTimer = 0;
+                }
+                
+                for (let i = pipes.length - 1; i >= 0; i--) {
+                    pipes[i].x -= currentPipeSpeed;
+                    
+                    // Check if bird passed the pipe
+                    if (!pipes[i].passed && pipes[i].x + pipeWidth < bird.x) {
+                        pipes[i].passed = true;
+                        score++;
+                        updateScore();
+                    }
+                    
+                    // Remove pipes that are off screen
+                    if (pipes[i].x + pipeWidth < 0) {
+                        pipes.splice(i, 1);
+                    }
+                }
+            }
+            
+            function updateBird() {
+                bird.velocity += bird.gravity;
+                bird.y += bird.velocity;
+                
+                // Check for collisions with top and bottom
+                if (bird.y - bird.height / 2 < 0 || bird.y + bird.height / 2 > canvas.height) {
+                    endGame();
+                }
+                
+                // Check for collisions with pipes
+                for (const pipe of pipes) {
+                    if (
+                        bird.x + bird.width / 2 > pipe.x &&
+                        bird.x - bird.width / 2 < pipe.x + pipeWidth &&
+                        (bird.y - bird.height / 2 < pipe.height ||
+                         bird.y + bird.height / 2 > pipe.height + pipeGap)
+                    ) {
+                        endGame();
+                    }
+                }
+            }
+            
+            function flap() {
+                if (!gameRunning) return;
+                bird.velocity = bird.jumpForce;
+                
+                // Add a little visual feedback
+                bird.color = '#05d9e8';
+                setTimeout(() => {
+                    bird.color = '#ff2a6d';
+                }, 100);
+            }
+            
+            function gameLoop() {
+                const now = Date.now();
+                const deltaTime = now - lastTime;
+                lastTime = now;
+                
+                // Clear canvas
+                ctx.fillStyle = '#0f0e17';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw grid
+                drawGrid();
+                
+                // Update and draw pipes
+                updatePipes(deltaTime);
+                drawPipes();
+                
+                // Update and draw bird
+                updateBird();
+                drawBird();
+                
+                // Continue game loop if running
+                if (gameRunning) {
+                    animationId = requestAnimationFrame(gameLoop);
+                }
+            }
+            
+            // Event listeners
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', startGame);
+            
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (!gameRunning && !startScreen.classList.contains('hidden')) {
+                        startGame();
+                    } else {
+                        flap();
+                    }
+                }
+            });
+            
+            canvas.addEventListener('click', () => {
+                if (gameRunning) {
+                    flap();
+                } else if (!gameOverScreen.classList.contains('hidden')) {
+                    startGame();
+                }
+            });
+            
+            // Initial grid drawing
+            drawGrid();
+            
+            // Add some decorative elements
+            function drawDecorations() {
+                // Title effect
+                ctx.font = '20px Orbitron';
+                ctx.fillStyle = 'rgba(5, 217, 232, 0.2)';
+                ctx.textAlign = 'center';
+                ctx.fillText('NEON GRID ADVENTURE', canvas.width / 2, 30);
+                
+                // Signature
+                ctx.font = '12px Orbitron';
+                ctx.fillStyle = 'rgba(255, 42, 109, 0.5)';
+                ctx.textAlign = 'right';
+                ctx.fillText('CYBERFLAPPY v1.0', canvas.width - 10, canvas.height - 10);
+            }
+            
+            drawDecorations();
+        });
+    </script>
+</body>
+</html>
